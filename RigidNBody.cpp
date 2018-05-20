@@ -97,10 +97,12 @@ struct NBody{
     void operator()(const state_type& R, state_type& A,  double t){
         A(0)=vector<double>(12);
         f(A(0),R);
+        vector<vector<double> > norm_r(std::move(vector<vector<double> >(R.size(),vector<double>(R.size()))));
+        norm(R,norm_r);
         for(unsigned j=1;j<R.size();++j){
             A(j)=vector<double>(6);
-            Fvel(A(j),R(j),norm_R[current](j));
-            Faccel(A(j),R,norm_R[current](j),j);
+            Fvel(A(j),R(j),norm_r(j));
+            Faccel(A(j),R,norm_r(j),j);
         }
     }    
     void operator()( const state_type &R , double t ){
