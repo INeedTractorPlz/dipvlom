@@ -117,20 +117,24 @@ struct Sphere_t : Surface_t{
 struct Body_t{
     std::vector<masspt_t> points;
     Body_position_t body_position;    
-    state_vector rotational_inertia;
+    state_matrix rotational_inertia;
     std::function<data_type(state_vector)> density;
     data_type Mass;
     data_type grid_width;
+    unsigned number_granulations;
 
     const Surface_t& Surface;
     const grid_t& grid;
 
-    Body_t(const std::function<data_type(state_vector)>& density, const data_type& grid_width,
-    const Body_position_t& body_position, const Surface_t& Surface, const grid_t& grid) :
-    density(density), grid_width(grid_width), body_position(body_position), 
-    Surface(Surface), grid(grid) {}
+    Body_t(const std::function<data_type(state_vector)>& density, unsigned number_granulations,
+    const Body_position_t& body_position, const Surface_t& Surface, 
+    const grid_t& grid) : density(density), number_granulations(number_granulations), 
+    body_position(body_position), Surface(Surface), grid(grid) {
+        grid_width = 2*Surface.max_width()/number_granulations;
+    }
 
-    void calc_mass();
+    void calc_mass_and_inertia();
+    void reduction_to_center(data_type presicion);
 };
 
 struct Force_t{
@@ -159,12 +163,12 @@ struct Quadrature_t{
     template<typename Force_type>
     auto operator()(const Force_type& f){
         auto result = f(body.points[0]);
-        //std::cout << body.points.size() << std::endl;
-        //std::cout << "result[0] = " << result << std::endl;
+        std::cout << body.points.size() << std::endl;
+        std::cout << "result[0] = " << result << std::endl;
         for(unsigned i=1; i < body.points.size(); ++i){
             result += f(body.points[i]); 
             //if(i <20)
-            //    std::cout << "result[" << i << "] = " << result << std::endl;
+            std::cout << "result[" << i << "] = " << f(body.points[i]) << std::endl;
         }
         return result;
     }

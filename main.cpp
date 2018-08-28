@@ -154,18 +154,15 @@ int main(int argc, char *const argv[]){
     std::ifstream planet_ephemeris_f, planet_mass_f, initial_data_f, size_f, size_integrate_f;
     std::ofstream body_position_f;
 
-    data_type pi = atan(data_type(1.))*4;
-    data_type Time, step, G = 4*pi*pi, const_density = 1.0, grid_width, Radius;
-    unsigned current = 0,number_steps,number_bodies;
+    data_type pi = atan(data_type(1.))*4, presicion = 1e-06;
+    data_type Time, step, G = 4*pi*pi, const_density_1 = 1.0, const_density_2 = 100., Radius;
+    unsigned current = 0, number_steps, number_bodies, number_granulations;
     std::vector<std::vector<state_vector> > planet_ephemeris;
     std::vector<data_type> planet_mass;
     state_vector angles(3);
 
     RungeKutta4<data_type,Body_position_t> rk4;
     Body_position_t Body_position;
-
-    std::function<data_type(const state_vector&)> density = 
-    [const_density](const state_vector& v)->data_type{return const_density;};
 
     initial_data_f.open("Body_initial.dat",std::ios_base::in);
         for(unsigned i=0; i<3; ++i)
@@ -184,10 +181,9 @@ int main(int argc, char *const argv[]){
     std::cout << Body_position.Euler_angles.Rot << std::endl;
     
     size_f.open("size_grid.dat",std::ios_base::in);
-        size_f >> grid_width >> Radius;  
+        size_f >> number_granulations >> Radius;  
     size_f.close();
 
-    grid_width /= 1.5e+11;
     Radius /= 1.5e+11;
     size_integrate_f.open("size_integrate.dat",std::ios_base::in);
         size_integrate_f >> Time >> number_steps;  
@@ -225,20 +221,34 @@ int main(int argc, char *const argv[]){
     planet_ephemeris[0][1](0) = 1.0;
     */
 
+
+
+    std::function<data_type(const state_vector&)> density = 
+    [const_density_1, const_density_2](const state_vector& v)->data_type{
+        if(v(1) > 0)
+            return const_density_1;
+        else
+            return const_density_2;
+        };
+    
     Sphere_t Sphere(Radius);
     Cubic_grid_t grid;
-    Body_t Body(density, grid_width, Body_position, Sphere, grid);
+    Body_t Body(density, number_granulations, Body_position, Sphere, grid);
     std::vector<Body_position_t> Rigit_body_orbit;
     Force_t Force(G, current, Body, planet_ephemeris, planet_mass);
     
     Body.grid.grid_fill(Body,Body.Surface);
-    Body.calc_mass();
-    //for(auto it : Body.points)
-    //    std::cout << it.coord << std::endl;
-    //std::cout << Force.Full_Torque() << std::endl;
-    std::cout << Body.Mass << std::endl;
+    Body.calc_mass_and_inertia();
+    Body.reduction_to_center(presicion);
 
-    Integrator_t Integrator(Rigit_body_orbit, current, Body, Force);
+    /*for(auto it : Body.points)
+        std::cout << it.coord << std::endl;
+    */
+    std::cout << Force.Full_Torque() << std::endl;
+    std::cout << "Body.Mass = " << Body.Mass << std::endl;
+    std::cout << "Rotational inertia:" << std::endl << Body.rotational_inertia << std::endl;
+
+    /*Integrator_t Integrator(Rigit_body_orbit, current, Body, Force);
     
     step = Time/number_steps;
     std::cout << "Time = " << Time << std::endl;
@@ -257,6 +267,6 @@ int main(int argc, char *const argv[]){
         body_position_f << Rigit_body_orbit[k].angular_velocity << std::endl << std::endl;
     }
     body_position_f.close();
-    
+    */
     return 0;
 }

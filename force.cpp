@@ -41,7 +41,7 @@ state_vector Force_t::operator()(const masspt_t& masspt) const{
         
         (*this)(masspt.coord + Body.body_position.center, F);
         //std::cout << Body.body_position.Euler_angles.Rot << std::endl;
-        F = masspt.mass*prod(Body.body_position.Euler_angles.Rot, F);
+        F = masspt.mass*prod(trans(Body.body_position.Euler_angles.Rot), F);
         //std::cout << F << std::endl;
         return masspt.mass*cross_product(masspt.coord,F);
 }
@@ -57,7 +57,7 @@ void Force_t::operator()(const Body_position_t& R, Body_position_t& Derivative_B
         data_type A=1,B=1,C=1;
         
         L = Full_Torque();
-        L = prod(trans(R.Euler_angles.Rot),L);
+        //L = prod(trans(R.Euler_angles.Rot),L);
         
         const data_type& p = R.angular_velocity(0);
         const data_type& q = R.angular_velocity(1);
