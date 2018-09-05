@@ -4,19 +4,19 @@
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
 
+#include <getopt.h>
+
 #include <functional>
 #include<vector>
 #include<iterator>
+#include<cmath>
+#include<tuple>
 #define sign(a) ( ( (a) < 0 )  ?  -1   : ( (a) > 0 ) )
 
 #include<iostream>
 
 #ifndef FUNCTIONS
 #include"functions.hpp"
-#endif
-
-#ifndef BODY
-#include"Body_t.hpp"
 #endif
 
 using namespace boost::numeric::ublas;
@@ -26,10 +26,76 @@ typedef double data_type;
 typedef vector<data_type> state_vector;
 typedef matrix<data_type> state_matrix;
 
+template<int number_shorts, int number_longs, typename Head, typename... Args>
+struct parser
+{
+    static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
+    const std::vector<char>& short_keys, struct option longOpts[], int longIndex)
+    {
+        constexpr int k = sizeof...(Args) + 1 - 2*number_longs - 2*number_shorts;
+        constexpr int N = k + number_shorts + number_longs;
+        if(opt == short_keys[k])
+            std::get<N+k>(parameters)(std::get<k>(parameters), optarg);   
+        parser<number_shorts-1, number_longs, Args...>::parse(parameters, opt, optarg, short_keys,
+        longOpts, longIndex);
+    }
+};
+
+template<int number_longs, typename Head, typename... Args>
+struct parser<0, number_longs, Head, Args...>
+{
+    static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
+    const std::vector<char>& short_keys,  struct option longOpts[], int longIndex)
+    {
+        constexpr int N = sizeof...(Args) + 1 - number_longs;
+        constexpr int l = 2*N - number_longs;
+        if(opt == 0)
+            if(longOpts[l - short_keys.size()].name == longOpts[longIndex].name)
+                std::get<N+l>(parameters)(std::get<l>(parameters), optarg);
+        parser<0,number_longs - 1, Args...>::parse(parameters, opt, optarg, short_keys,
+        longOpts, longIndex);
+    }
+};
+
+template<typename Head, typename... Args>
+struct parser<0, 0, Head, Args...>
+{
+    static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
+    const std::vector<char>& short_keys,  struct option longOpts[], int longIndex)
+    {    }
+};
+
+template<int number_shorts, int number_longs>
+struct Parser_t{
+    char* shortopts;
+    struct option longOpts[];
+    std::vector<char> short_keys;
+    Parser_t(const std::vector<char>& short_keys, struct option longOpts[]) :
+    short_keys(short_keys), longOpts(longOpts){
+        for(unsigned i = 0; i < short_keys.size(); ++i){
+            shortopts[2*i] = short_keys[i];
+            shortopts[2*i + 1] = ":";
+        }
+    }
+    template<typename ... Types>
+    void Parser(int argc, char *const argv[], Types... Args){
+        std::tuple<Types ...> parameters = std::make_tuple(Args...);
+        int longIndex;
+        auto opt =  getopt_long(argc,argv,shortopts,longOpts,&longIndex);
+        while(opt != -1){
+            parser<number_shorts, number_longs, Types...>::parse(parameters,
+            opt, optarg, short_keys,longOpts,longIndex);  
+            opt = getopt_long(argc,argv,shortopts,longOpts,&longIndex);  
+        }
+
+    }
+};
+
+
 template<typename type>
 struct Jacoby_t{
     //const state_matrix& input_matrix;
-    matrix<type> current_matrix;
+    matrix<type>& current_matrix;
     unsigned number_rot, matrix_size;
     matrix<type> rotation_matrix;
     vector<type> eigenvalues;
@@ -48,50 +114,52 @@ struct Jacoby_t{
             Norm += current_matrix(i,i)*current_matrix(i,i);
         return Norm;
     }
-    void HalfRotation(type c, type s, unsigned p, unsigned q){
-    	vector<type> v(matrix_size);
-    	v = column(rotation_matrix,p);
-		column(rotation_matrix,p) = v*c - column(rotation_matrix,q)*s;
-		column(rotation_matrix,q) = s*v + column(rotation_matrix,q)*c;
-    }
-    void Rotation(type c, type s, unsigned p, unsigned q){
-        vector<type> v1(matrix_size),v2(matrix_size);
-        v1 = row(current_matrix,p); v2 = row(current_matrix,q);
-		row(current_matrix,p) = v1*c - v2*s;
-		row(current_matrix,q) = v2*c + s*v1;
-
-		current_matrix(p,p) = c*c*v1(p) + s*s*v2(q) - 2*c*s*v1(q);
-		current_matrix(p,q) = (c*c - s*s)*v1(q) + c*s*(v1(p) - v2(q));		
-		current_matrix(q,q) = s*s*v1(p) + c*c*v2(q) + 2*c*s*v1(q);
-        current_matrix(q,p) = current_matrix(p,q);
-		
-        column(current_matrix,p) = row(current_matrix,p);
-        column(current_matrix,q) = row(current_matrix,q);
-	}
-    Jacoby_t(const matrix<type>& input_matrix, type precision) : current_matrix(input_matrix), 
+    Jacoby_t(matrix<type>& input_matrix, type precision) : current_matrix(input_matrix), 
     precision(precision), matrix_size(input_matrix.size1()){
-        type tetta, t, c, s;
-        rotation_matrix = matrix<type>(matrix_size, matrix_size, 1.0);
+        type tetta, c, s;
+        rotation_matrix = matrix<type>(matrix_size, matrix_size, 0.);
+        matrix<type> rot;
+        for(unsigned i = 0; i < matrix_size; ++i)
+            rotation_matrix(i,i) = 1.0;
         number_rot = 0;
         eigenvalues.resize(matrix_size);
-
         while(NormOffDiagonal()/NormDiagonal() > precision){
             for(unsigned p = 0; p < matrix_size; ++p){
-                for(unsigned q = p; q < matrix_size; ++q){
-                    tetta = (current_matrix(q,q)-current_matrix(p,p))/(2*(current_matrix(p,q)));
-                    t = sign(tetta)/(fabs(tetta)+sqrt(tetta*tetta+1));
-                    c = 1/sqrt(t*t+1); s = t*c;
-                    Rotation(c, s, p, q);
-                    HalfRotation(c, s, p, q);
+                for(unsigned q = p + 1; q < matrix_size; ++q){ 
+                    tetta = atan2(2*current_matrix(p,q),current_matrix(q,q)-current_matrix(p,p))/2;
+                    c = cos(tetta); s = sin(tetta);
+                    rot = matrix<type>(matrix_size, matrix_size, 0.);
+                    for(unsigned i = 0; i < matrix_size; ++i)
+                        rot(i,i) = 1.0;
+                    rot(p,p) = c; rot(q,q) = c;
+                    rot(p,q) = s; rot(q,p) = -s;
+                    current_matrix = prod(trans(rot),current_matrix);
+                    current_matrix = prod(current_matrix, rot);
+                    rotation_matrix = prod(rotation_matrix, rot);
                 }
             }
+            std::cout << NormOffDiagonal()/NormDiagonal() << std::endl;
             ++number_rot;
         }
-
+        
         for(unsigned i=0; i < matrix_size; ++i)
             eigenvalues(i) = current_matrix(i,i);
     }
 
+};
+
+template<typename type, typename Type>
+struct RungeKutta4{
+    Type k1,k2,k3,k4;
+    RungeKutta4(){}
+    template<typename sysf>
+    void do_step(sysf sysF, const Type &in, Type &out, type time, type step){
+        sysF(in,k1,time);
+        sysF(in+step*k1/2.,k2,time+step/2.);
+        sysF(in+step*k2/2.,k3,time+step/2.);
+        sysF(in+step*k3,k4,time+step);
+        out=std::move(in + step*(k1+2.*k2+2.*k3+k4)/6.);
+    }
 };
 
 template<typename type, typename Type>

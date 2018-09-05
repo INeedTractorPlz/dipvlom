@@ -4,16 +4,10 @@
 #include <functional>
 #include<vector>
 #include<iterator>
+#include<string>
+#include<fstream>
 
 #include<iostream>
-
-#ifndef FUNCTIONS
-#include"functions.hpp"
-#endif
-
-#ifndef TYPES
-#include"basic_types.hpp"
-#endif
 
 #ifndef BODY
 #include"Body_t.hpp"
@@ -53,7 +47,7 @@ void Body_t::calc_mass_and_inertia(){
 
         rotational_inertia(1,2) = calc([](const masspt_t& masspt)->data_type{
             return -masspt.mass*masspt.coord(1)*masspt.coord(2);});
-        rotational_inertia(2,1) = rotational_inertia(0,2);
+        rotational_inertia(2,1) = rotational_inertia(1,2);
 }
     
 void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
@@ -61,6 +55,7 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
         el_volume = Body.grid_width*Body.grid_width*Body.grid_width;
         masspt_t masspt = {state_vector(3,0), el_volume*Body.density(state_vector(3,0))};
         
+        std::cout << "STOP_1" << std::endl;
         for(data_type x = -i/2; x <= i/2; ++x){
             masspt.coord(0) = x*Body.grid_width;
             for(data_type y = -i/2; y <= i/2; ++y){
@@ -69,11 +64,12 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
                     masspt.coord(2) = z*Body.grid_width;
                     if(Surface.is_inside(masspt)){
                         masspt.mass = el_volume*Body.density(masspt.coord);
-                        Body.points.push_back(masspt);
+                        Body.points.emplace_back(masspt);
                     }
                 }
             }
         }
+        std::cout << "STOP_2" << std::endl;
 }
 void Body_t::reduction_to_center(data_type presicion){
     Quadrature_t calc_center(*this);
@@ -84,57 +80,47 @@ void Body_t::reduction_to_center(data_type presicion){
     std::cout << "center = " << center << std::endl;
     
     Jacoby_t<data_type> Jacoby(rotational_inertia, presicion);
+    std::cout << "Jacoby.rotation_matrix:" << std::endl;
+    std::cout << Jacoby.rotation_matrix << std::endl;
     for(auto it : points)
         it.coord = prod(Jacoby.rotation_matrix,it.coord);
 }    
-/*
-Euler_angles_t operator+(const Euler_angles_t& Angles_left, const Euler_angles_t& Angles_right){
-    return Euler_angles_t (Angles_left.angles + Angles_right.angles);
+
+void Polygon_t::initial(const std::string& file_name){
+        std::ifstream aster_data(file_name);
+        std::vector<state_vector> vertices{};
+        char l;
+        state_vector v(3);
+        aster_data >> l;
+        while (l == 'v') {
+            aster_data >> v;
+            std::cout << v << std::endl;
+            vertices.push_back(v);
+            aster_data >> l;
+        }
+        std::cout << "number of vertices " << vertices.size() << std::endl;
+        while (!aster_data.eof()) {
+            unsigned i, j, k;
+            aster_data >> i >> j >> k;
+            poligons.emplace_back(triangle_t(vertices[i-1], vertices[j-1], vertices[k-1]));
+            aster_data >> l;
+            std::cout << i << " " << j << " " << k << std::endl;
+        }
+        std::cout << "number of poligons " << poligons.size() << std::endl;
+        aster_data.close();
 }
 
-
-Euler_angles_t operator+=(Euler_angles_t& Angles_left, const Euler_angles_t& Angles_right){
-    return (Angles_left = Angles_left + Angles_right);
+void Body_position_t::initial(const std::string& file_name){
+        std::ifstream initial_data_f(file_name);
+        state_vector angles(3);
+        for(unsigned i=0; i<3; ++i)
+            initial_data_f >> center(i);
+        for(unsigned i=0; i<3; ++i)
+            initial_data_f >> center_velocity(i);
+        for(unsigned i=0; i<3; ++i)
+            initial_data_f >> angles(i);
+        for(unsigned i=0; i<3; ++i)
+            initial_data_f >> angular_velocity(i);
+        Euler_angles = Euler_angles_t(angles);
+        initial_data_f.close();
 }
-
-template<typename scalar_t>
-Euler_angles_t operator*(const Euler_angles_t& Angles_left, const scalar_t& scalar){
-    return Euler_angles_t (Angles_left.angles*scalar);
-}
-
-template<typename scalar_t>
-Euler_angles_t operator*(const scalar_t& scalar, const Euler_angles_t& Angles_left){
-    return Euler_angles_t (Angles_left.angles*scalar);
-}
-
-template<typename scalar_t>
-Euler_angles_t operator/(const Euler_angles_t& Angles_left, const scalar_t& scalar){
-    return Euler_angles_t (Angles_left.angles/scalar);
-}
-
-Body_position_t operator+(const Body_position_t& Body_left, const Body_position_t& Body_right){
-    return Body_position_t (Body_left.center + Body_right.center, Body_left.center_velocity + 
-    Body_right.center_velocity, Body_left.Euler_angles.angles + Body_right.Euler_angles.angles, 
-    Body_left.angular_velocity + Body_right.angular_velocity);
-}
-
-template<typename scalar_t>
-Body_position_t operator*(const Body_position_t& Body_left, const scalar_t& scalar){
-    return Body_position_t (Body_left.center*scalar, Body_left.center_velocity*scalar, 
-    Body_left.Euler_angles.angles*scalar, Body_left.angular_velocity*scalar);
-}
-
-
-template<typename scalar_t>
-Body_position_t operator*(const scalar_t& scalar, const Body_position_t& Body_left){
-    return Body_position_t (Body_left.center*scalar, Body_left.center_velocity*scalar, 
-    Body_left.Euler_angles.angles*scalar, Body_left.angular_velocity*scalar);
-}
-
-
-template<typename scalar_t>
-Body_position_t operator/(const Body_position_t& Body_left, const scalar_t& scalar){
-    return Body_position_t (Body_left.center/scalar, Body_left.center_velocity/scalar, 
-    Body_left.Euler_angles.angles/scalar, Body_left.angular_velocity/scalar);
-}
-*/

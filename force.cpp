@@ -11,27 +11,45 @@
 #include"Body_t.hpp"
 #endif
 
-#ifndef TYPES
-#include"basic_types.hpp"
-#endif
-
-#ifndef FUNCTIONS
-#include"functions.hpp"
-#endif
-
 using namespace boost::numeric::ublas;
 
 
 typedef double data_type;
 typedef vector<data_type> state_vector;
-
+state_vector Force_t::external_potential(unsigned number_body, data_type time) const{
+        if(number_body == 1)
+                return state_vector(3,0.);
+        state_vector Earth(3,0.);
+        data_type phi = time*M_PI*2;
+        Earth(0) = cos(phi);
+        Earth(1) = sin(phi);
+        //std::cout << "time = " << time << std::endl;
+        //std::cout << "Earth = " << Earth << std::endl;
+        return Earth;
+}
 void Force_t::operator()(const state_vector& R, state_vector& A) const{
-       A = state_vector(R.size());
+       A = state_vector(R.size(),0);
        for(unsigned i=0; i < planet_ephemeris[current].size(); ++i){
            A += planet_mass[i]*(R - planet_ephemeris[current][i])/(norm_2(R - planet_ephemeris[current][i])
-           *norm_2(R - planet_ephemeris[current][i]));
+           *norm_2(R - planet_ephemeris[current][i])*norm_2(R - planet_ephemeris[current][i]));
        } 
        A*=G;
+}
+
+
+void Force_t::operator()(const state_vector& R, state_vector& A, data_type time){
+       A = state_vector(R.size(),0);
+       state_vector r;
+       for(unsigned i = 0; i < planet_mass.size(); ++i){
+           r = external_potential(i, time);
+           A += planet_mass[i]*(R - r)/(norm_2(R - r)*norm_2(R - r)*norm_2(R - r));
+           //std::cout << "r = " << r << std::endl;
+           //std::cout << "R - r = " << R - r << std::endl;
+           //std::cout << "norm_2(R - r) = " << norm_2(R - r) << std::endl;
+       } 
+       //std::cout << "G = " << G << std::endl;
+       A*=G;
+       //std::cout << "A = " << A << std::endl; 
 }
 
 state_vector Force_t::operator()(const masspt_t& masspt) const{
@@ -51,10 +69,13 @@ state_vector Force_t::Full_Torque(){
         return integrator_Tor(*this)/Body.Mass;
 }
 
-void Force_t::operator()(const Body_position_t& R, Body_position_t& Derivative_Body_Position){
+void Force_t::operator()(const Body_position_t& R, Body_position_t& Derivative_Body_Position,
+data_type time){
         state_vector L;
 
-        data_type A=1,B=1,C=1;
+        const data_type& A = Body.rotational_inertia(0,0);
+        const data_type& B = Body.rotational_inertia(1,1);
+        const data_type& C = Body.rotational_inertia(2,2);
         
         L = Full_Torque();
         //L = prod(trans(R.Euler_angles.Rot),L);
@@ -72,8 +93,9 @@ void Force_t::operator()(const Body_position_t& R, Body_position_t& Derivative_B
         const data_type& ctetta = R.Euler_angles.ctetta;
 
         Derivative_Body_Position.center = Body.body_position.center_velocity; //x,y,z
-        (*this)(R.center, Derivative_Body_Position.center_velocity); //Vx,Vy,Vz
+        (*this)(R.center, Derivative_Body_Position.center_velocity, time); //Vx,Vy,Vz
 
+        //std::cout << "Derivative_Body_Position.center_velocity = " << Derivative_Body_Position.center_velocity << std::endl;
         Derivative_Body_Position.Euler_angles.angles(0) =   //psi - прецессия
         (p*sphi + q*cphi)/stetta; 
         
