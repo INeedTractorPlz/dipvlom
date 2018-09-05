@@ -73,7 +73,9 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
 }
 void Body_t::reduction_to_center(data_type presicion){
     Quadrature_t calc_center(*this);
-    state_vector center = calc_center([](const masspt_t& masspt)->state_vector{return masspt.coord*masspt.mass;})/this->Mass;
+    state_vector center = calc_center([](const masspt_t& masspt)->state_vector{
+        return masspt.coord*masspt.mass;
+        })/this->Mass;
     for(auto it : points){
         it.coord += -center;
     }

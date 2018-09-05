@@ -1,5 +1,6 @@
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
+#include<boost/lexical_cast.hpp>
 
 #include <functional>
 #include<vector>
@@ -37,6 +38,16 @@ int main(int argc, char *const argv[]){
     std::cout << "STOP_-1" << std::endl;
     Body_position.initial("Body_initial.dat");
     std::cout << Body_position.Euler_angles.Rot << std::endl;
+
+    std::vector<struct option> longOpts({
+        {"number_steps",required_argument, NULL,0}
+    });
+    
+    std::string short_opts = "G:d:";
+    Parser_t<2,1> Parser(short_opts, &longOpts[0]);
+
+    std::function<void(data_type&, char*)> fun_data_type = fun_for_parser<data_type>;
+    std::function<void(unsigned&, char*)> fun_unsigned = fun_for_parser<unsigned>;
     
     size_f.open("size_grid.dat",std::ios_base::in);
         size_f >> number_granulations >> Radius;  
@@ -78,6 +89,8 @@ int main(int argc, char *const argv[]){
     planet_ephemeris[0][1](0) = 1.0;
     */
 
+    Parser.Parser(argc, argv, G, const_density_1, number_steps, fun_data_type, 
+    fun_data_type, fun_unsigned);
 
 
     std::function<data_type(const state_vector&)> density = 
@@ -127,5 +140,8 @@ int main(int argc, char *const argv[]){
     }
     body_position_f.close();
     
+    std::cout << "G= " << G << std::endl; 
+    std::cout << "const_density_1= " << const_density_1 << std::endl; 
+    std::cout << "number_steps= " << number_steps << std::endl; 
     return 0;
 }

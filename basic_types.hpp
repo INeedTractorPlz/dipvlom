@@ -30,14 +30,18 @@ template<int number_shorts, int number_longs, typename Head, typename... Args>
 struct parser
 {
     static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
-    const std::vector<char>& short_keys, struct option longOpts[], int longIndex)
+    const std::vector<char>& short_keys, struct option* longOpts, int longIndex)
     {
         constexpr int k = sizeof...(Args) + 1 - 2*number_longs - 2*number_shorts;
         constexpr int N = k + number_shorts + number_longs;
+        auto lambda_get = [](Head head, Args... args){
+            return std::make_tuple(std::ref(args)...);
+        };
+        std::tuple<Args...> parameters_without_Head = std::apply(lambda_get, parameters);
         if(opt == short_keys[k])
-            std::get<N+k>(parameters)(std::get<k>(parameters), optarg);   
-        parser<number_shorts-1, number_longs, Args...>::parse(parameters, opt, optarg, short_keys,
-        longOpts, longIndex);
+            std::get<N>(parameters)(std::get<0>(parameters), optarg); 
+        parser<number_shorts-1, number_longs, Args...>::parse(parameters_without_Head, 
+        opt, optarg, short_keys,longOpts, longIndex);
     }
 };
 
@@ -45,15 +49,19 @@ template<int number_longs, typename Head, typename... Args>
 struct parser<0, number_longs, Head, Args...>
 {
     static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
-    const std::vector<char>& short_keys,  struct option longOpts[], int longIndex)
+    const std::vector<char>& short_keys,  struct option* longOpts, int longIndex)
     {
         constexpr int N = sizeof...(Args) + 1 - number_longs;
-        constexpr int l = 2*N - number_longs;
+        constexpr int l = N - number_longs;
+        auto lambda_get = [](Head head, Args... args){
+            return std::make_tuple(std::ref(args)...);
+        };
+        std::tuple<Args...> parameters_without_Head = std::apply(lambda_get, parameters);
         if(opt == 0)
             if(longOpts[l - short_keys.size()].name == longOpts[longIndex].name)
-                std::get<N+l>(parameters)(std::get<l>(parameters), optarg);
-        parser<0,number_longs - 1, Args...>::parse(parameters, opt, optarg, short_keys,
-        longOpts, longIndex);
+                std::get<N>(parameters)(std::get<0>(parameters), optarg);
+        parser<0,number_longs - 1, Args...>::parse(parameters_without_Head, 
+        opt, optarg, short_keys,longOpts, longIndex);
     }
 };
 
@@ -61,36 +69,39 @@ template<typename Head, typename... Args>
 struct parser<0, 0, Head, Args...>
 {
     static void parse(std::tuple<Head, Args ...> parameters, int opt, char *optarg, 
-    const std::vector<char>& short_keys,  struct option longOpts[], int longIndex)
+    const std::vector<char>& short_keys,  struct option* longOpts, int longIndex)
     {    }
 };
 
 template<int number_shorts, int number_longs>
 struct Parser_t{
-    char* shortopts;
-    struct option longOpts[];
+    const char* short_opts;
     std::vector<char> short_keys;
-    Parser_t(const std::vector<char>& short_keys, struct option longOpts[]) :
-    short_keys(short_keys), longOpts(longOpts){
-        for(unsigned i = 0; i < short_keys.size(); ++i){
-            shortopts[2*i] = short_keys[i];
-            shortopts[2*i + 1] = ":";
+    struct option* longOpts;
+    Parser_t(const std::string& short_opts, struct option* longOpts) :
+    short_opts(short_opts.c_str()), longOpts(longOpts){
+        for(unsigned i = 0; i < short_opts.size(); i += 2){
+            short_keys.push_back(short_opts[i]);
         }
     }
     template<typename ... Types>
-    void Parser(int argc, char *const argv[], Types... Args){
-        std::tuple<Types ...> parameters = std::make_tuple(Args...);
-        int longIndex;
-        auto opt =  getopt_long(argc,argv,shortopts,longOpts,&longIndex);
+    void Parser(int argc, char *const argv[], Types&&... Args){
+        std::tuple<Types&& ...> parameters = std::make_tuple(std::ref(Args)...);
+        int longIndex; 
+        auto opt =  getopt_long(argc,argv,short_opts,longOpts,&longIndex);
         while(opt != -1){
-            parser<number_shorts, number_longs, Types...>::parse(parameters,
+            parser<number_shorts, number_longs, Types&&...>::parse(parameters,
             opt, optarg, short_keys,longOpts,longIndex);  
-            opt = getopt_long(argc,argv,shortopts,longOpts,&longIndex);  
+            opt = getopt_long(argc,argv,short_opts,longOpts,&longIndex);  
         }
-
     }
 };
 
+template<typename type>
+void fun_for_parser(type& parameter, char* optarg){
+        std::string ss=boost::lexical_cast<std::string>(optarg);
+        parameter = boost::lexical_cast<type>(ss);
+}
 
 template<typename type>
 struct Jacoby_t{

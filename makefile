@@ -1,8 +1,8 @@
 CC = g++
-CCFLAGS = -c --std=c++14 -frtti -lm -O2
+CCFLAGS = -c --std=c++1z -frtti -lm -O2
 
 all : force.o Body_t.o basic_functions.o main.o
-	$(CC) force.o Body_t.o basic_functions.o main.o --std=c++14 -frtti -O2 -o main
+	$(CC) force.o Body_t.o basic_functions.o main.o --std=c++1z -frtti -O2 -o main
 
 main.o: main.cpp
 	$(CC) $(CCFLAGS) main.cpp
