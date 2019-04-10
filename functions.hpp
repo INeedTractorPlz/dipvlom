@@ -1,5 +1,7 @@
+#ifndef FUNCTIONS
 #define FUNCTIONS
 
+#include <boost/numeric/odeint.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
 
@@ -7,15 +9,24 @@
 
 #include<iostream>
 
-#ifndef TYPES
-#include"basic_types.hpp"
-#endif
+#include"runge-kutta.hpp"
 
 using namespace boost::numeric::ublas;
 
 
 typedef double data_type;
 typedef vector<data_type> state_vector;
+
+template<typename ... Types>
+inline void simple_cout(Types&&... args){
+    (std::cout << ... << args) << std::endl;
+}
+
+template<typename type>
+void fun_for_parser(type& parameter, char* optarg){
+        std::string ss=boost::lexical_cast<std::string>(optarg);
+        parameter = boost::lexical_cast<type>(ss);
+}
 
 template<typename type, typename Integrator, typename sysf, typename observer,typename Type, 
 typename controller = std::function<int(const Type& X, const Type& Y)>, 
@@ -30,7 +41,7 @@ inline int integrate(Integrator rk, sysf sysF, Type& X0, type t, type h, int n, 
     Obs(X0,t);
     while(t<T && Bad(X0,t)){
         state=-1;
-        std::cout << t << '\r';
+        std::cout << t << " " << number_steps << '\r';
         rk.do_step(sysF,X0,Y,t,h);
         if(Err(X0,Y)==-1){
             goto obs_point;
@@ -92,3 +103,13 @@ inline std::istream& operator>>(std::istream& is, vector<type>& in){
         is >> it;
     return is;
 }
+
+template<class Number_t, std::size_t system_order>
+std::ostream& operator<<(std::ostream& os, const rg::state_vector<Number_t, system_order> &in){
+    for(auto& it : in)
+        os << it << " ";
+    os << std::endl;
+    return os;
+} 
+
+#endif

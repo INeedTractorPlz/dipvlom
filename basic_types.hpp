@@ -1,3 +1,4 @@
+#ifndef TYPES
 #define TYPES
 
 #include <boost/numeric/odeint.hpp>
@@ -15,9 +16,8 @@
 
 #include<iostream>
 
-#ifndef FUNCTIONS
 #include"functions.hpp"
-#endif
+#include"runge-kutta.hpp"
 
 using namespace boost::numeric::ublas;
 
@@ -34,12 +34,15 @@ struct parser
     {
         constexpr int k = sizeof...(Args) + 1 - 2*number_longs - 2*number_shorts;
         constexpr int N = k + number_shorts + number_longs;
-        auto lambda_get = [](Head head, Args... args){
+        auto beheading = [](Head head, Args... args){
             return std::make_tuple(std::ref(args)...);
         };
-        std::tuple<Args...> parameters_without_Head = std::apply(lambda_get, parameters);
+        std::tuple<Args...> parameters_without_Head = std::apply(beheading, parameters);
         if(opt == short_keys[k])
-            std::get<N>(parameters)(std::get<0>(parameters), optarg); 
+            //if constexpr (sizeof...(Args) > number_longs + number_shorts)
+                std::get<N>(parameters)(std::get<0>(parameters), optarg);
+            //else
+            //    fun_for_parser<tuple_element< 
         parser<number_shorts-1, number_longs, Args...>::parse(parameters_without_Head, 
         opt, optarg, short_keys,longOpts, longIndex);
     }
@@ -53,10 +56,10 @@ struct parser<0, number_longs, Head, Args...>
     {
         constexpr int N = sizeof...(Args) + 1 - number_longs;
         constexpr int l = N - number_longs;
-        auto lambda_get = [](Head head, Args... args){
+        auto beheading = [](Head head, Args... args){
             return std::make_tuple(std::ref(args)...);
         };
-        std::tuple<Args...> parameters_without_Head = std::apply(lambda_get, parameters);
+        std::tuple<Args...> parameters_without_Head = std::apply(beheading, parameters);
         if(opt == 0)
             if(longOpts[l - short_keys.size()].name == longOpts[longIndex].name)
                 std::get<N>(parameters)(std::get<0>(parameters), optarg);
@@ -96,12 +99,6 @@ struct Parser_t{
         }
     }
 };
-
-template<typename type>
-void fun_for_parser(type& parameter, char* optarg){
-        std::string ss=boost::lexical_cast<std::string>(optarg);
-        parameter = boost::lexical_cast<type>(ss);
-}
 
 template<typename type>
 struct Jacoby_t{
@@ -189,3 +186,39 @@ struct RungeKutta5_Fehlberg{
         out=std::move(in + step*(16*k1/135 + 6656*k3/12825 + 28561*k4/56430 - 9*k5/50 + 2*k6/55));
     }
 };
+
+template<typename type, typename Type, std::size_t system_order = 12,std::size_t method_order = 4>
+struct Lobatto{
+    rg::Lobatto3a<type, system_order, method_order> lobatto3a;
+    using state_vector_t = rg::state_vector<type, system_order>;
+    type epsilon = 10*std::numeric_limits<type>::epsilon();
+    Lobatto(){}
+    /*template<class RHS>
+    auto do_step(const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,
+    const Number_t& epsilon)
+    {
+        return this->do_step_impl(a,b,sigma,y,rhs,t,dt,epsilon);
+    }*/
+    template<typename sysf>
+    void do_step(sysf sysF, const Type &in, Type &out, type time, type step){
+        std::function<state_vector_t(const state_vector_t&, const type&)> rhs =
+        [&sysF](const state_vector_t &y, const type &t){
+            Type out, in = Type(y);
+            sysF(in, out, t);
+            //simple_cout(y);
+            auto out_vec = out.to_vec(); 
+            if(out_vec != out_vec){
+                simple_cout("System state vector contains nan at time = ", t);
+                simple_cout("out_vec:", out_vec);
+                exit(0);
+            }
+            return out_vec;
+        };
+        //simple_cout("Before do_step");
+        auto out_vec = lobatto3a.do_step(in.to_vec(), rhs, time, step, epsilon);
+        //simple_cout("After do_step");
+        out = Type(out_vec);
+    }
+};
+
+#endif

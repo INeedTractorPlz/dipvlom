@@ -9,10 +9,8 @@
 
 #include<iostream>
 
-#ifndef BODY
 #include"Body_t.hpp"
-#endif
-
+#include"basic_types.hpp"
 
 using namespace boost::numeric::ublas;
 
@@ -55,7 +53,6 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
         el_volume = Body.grid_width*Body.grid_width*Body.grid_width;
         masspt_t masspt = {state_vector(3,0), el_volume*Body.density(state_vector(3,0))};
         
-        std::cout << "STOP_1" << std::endl;
         for(data_type x = -i/2; x <= i/2; ++x){
             masspt.coord(0) = x*Body.grid_width;
             for(data_type y = -i/2; y <= i/2; ++y){
@@ -69,7 +66,6 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
                 }
             }
         }
-        std::cout << "STOP_2" << std::endl;
 }
 void Body_t::reduction_to_center(data_type presicion){
     Quadrature_t calc_center(*this);
@@ -84,6 +80,7 @@ void Body_t::reduction_to_center(data_type presicion){
     Jacoby_t<data_type> Jacoby(rotational_inertia, presicion);
     std::cout << "Jacoby.rotation_matrix:" << std::endl;
     std::cout << Jacoby.rotation_matrix << std::endl;
+    
     for(auto it : points)
         it.coord = prod(Jacoby.rotation_matrix,it.coord);
 }    
@@ -96,7 +93,7 @@ void Polygon_t::initial(const std::string& file_name){
         aster_data >> l;
         while (l == 'v') {
             aster_data >> v;
-            std::cout << v << std::endl;
+            //std::cout << v << std::endl;
             vertices.push_back(v);
             aster_data >> l;
         }
@@ -106,7 +103,7 @@ void Polygon_t::initial(const std::string& file_name){
             aster_data >> i >> j >> k;
             poligons.emplace_back(triangle_t(vertices[i-1], vertices[j-1], vertices[k-1]));
             aster_data >> l;
-            std::cout << i << " " << j << " " << k << std::endl;
+            //std::cout << i << " " << j << " " << k << std::endl;
         }
         std::cout << "number of poligons " << poligons.size() << std::endl;
         aster_data.close();
@@ -126,3 +123,13 @@ void Body_position_t::initial(const std::string& file_name){
         Euler_angles = Euler_angles_t(angles);
         initial_data_f.close();
 }
+
+std::ostream& operator<<(std::ostream& is, const Body_position_t& in){
+    is << in.center << std::endl;
+    is << in.center_velocity << std::endl;
+    is << in.Euler_angles.angles << std::endl;
+    is << in.angular_velocity << std::endl; 
+    is << in.Euler_angles.Rot << std::endl << std::endl;
+    return is;
+}   
+

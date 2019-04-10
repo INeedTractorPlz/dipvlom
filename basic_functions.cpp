@@ -5,10 +5,6 @@
 
 #include<iostream>
 
-#ifndef TYPES
-#include"basic_types.hpp"
-#endif
-
 using namespace boost::numeric::ublas;
 
 

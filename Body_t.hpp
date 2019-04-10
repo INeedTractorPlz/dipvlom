@@ -1,3 +1,4 @@
+#ifndef BODY
 #define BODY
 
 #include <boost/numeric/ublas/matrix.hpp>
@@ -8,9 +9,11 @@
 #include<iterator>
 #include <algorithm>
 #include<string>
-
 #include<iostream>
+
 #include"functions.hpp"
+#include"runge-kutta.hpp"
+#include"force.hpp"
 
 using namespace boost::numeric::ublas;
 
@@ -18,8 +21,6 @@ using namespace boost::numeric::ublas;
 typedef double data_type;
 typedef vector<data_type> state_vector;
 typedef matrix<data_type> state_matrix;
-
-
 
 struct masspt_t{
     state_vector coord;
@@ -74,10 +75,42 @@ struct Body_position_t{
     const state_vector& angles, const state_vector& angular_velocity) : center(center), 
     center_velocity(center_velocity), Euler_angles(angles), angular_velocity(angular_velocity){ }
 
+    Body_position_t(const rg::state_vector<data_type, 12> &in_vec){
+        *this = Body_position_t();
+        rg::state_vector<data_type, 12> vec = in_vec;
+        std::copy(vec.begin(), vec.begin()+3, center.begin());
+        //simple_cout(center);
+        std::copy(vec.begin()+3, vec.begin()+6, center_velocity.begin());
+        //simple_cout(center_velocity);
+        state_vector angles = state_vector(3);
+        std::copy(vec.begin()+6, vec.begin()+9, angles.begin());
+        Euler_angles = Euler_angles_t(angles);
+        //simple_cout(angles);
+        std::copy(vec.begin()+9, vec.end(), angular_velocity.begin());
+        //simple_cout(angular_velocity);
+    }
+
     Body_position_t(){
         center.resize(3);
         center_velocity.resize(3);
         angular_velocity.resize(3);
+        Euler_angles.angles.resize(3);
+    }
+
+    //void fill_vec(){
+    //}
+
+    auto to_vec() const{
+        rg::state_vector<data_type, 12> vec;
+        std::copy(center.begin(), center.end(), vec.begin());
+        //simple_cout(vec);
+        std::copy(center_velocity.begin(), center_velocity.end(), vec.begin()+3);
+        //simple_cout(vec);
+        std::copy(Euler_angles.angles.begin(), Euler_angles.angles.end(), vec.begin()+6);
+        //simple_cout(vec);
+        std::copy(angular_velocity.begin(), angular_velocity.end(), vec.begin()+9);
+        //simple_cout(vec);
+        return vec;
     }
 
     void Change_position(const state_vector& center, const state_vector& center_velocity,
@@ -87,7 +120,12 @@ struct Body_position_t{
         this->Euler_angles = Euler_angles_t(angles);
         this->angular_velocity = angular_velocity;
     }
+
     void initial(const std::string& file_name);
+
+    //private:
+    //rg::state_vector<data_type, 12> vec;
+
 };
 
 struct Body_t;
@@ -164,32 +202,12 @@ struct Body_t{
         calc_mass_and_inertia();
         std::cout << "Rotational inertia:" << std::endl << rotational_inertia << std::endl;
         reduction_to_center(presicion);
+        std::cout << "Rotational inertia after reduction to center:" << std::endl << rotational_inertia << std::endl;
+        
     }
 
     void calc_mass_and_inertia();
     void reduction_to_center(data_type presicion);
-};
-
-struct Force_t{
-    
-    data_type G;
-    unsigned& current;
-    
-    Body_t& Body;
-    std::vector<std::vector<state_vector> > planet_ephemeris;
-    std::vector<data_type> planet_mass;
-
-    Force_t(data_type G, unsigned& current, Body_t& Body, 
-    const std::vector<std::vector<state_vector> >& planet_ephemeris, 
-    const std::vector<data_type>& planet_mass) : G(G), current(current), Body(Body),
-    planet_ephemeris(planet_ephemeris), planet_mass(planet_mass) {}
-
-    void operator()(const state_vector& R, state_vector& A, data_type time);
-    void operator()(const state_vector& R, state_vector& A) const;    
-    state_vector operator()(const masspt_t& masspt) const;
-    state_vector Full_Torque(); 
-    state_vector external_potential(unsigned number_body, data_type time) const;
-    void operator()(const Body_position_t& R, Body_position_t& Derivative_Body_Position, data_type time);
 };
 
 struct Quadrature_t{
@@ -218,20 +236,25 @@ struct Integrator_t{
     Force_t& Force) : Rigit_body_orbit(Rigit_body_orbit), current(current), 
     Body(Body), Force(Force){  }
     void operator()(const Body_position_t& R, Body_position_t& A, data_type time){
+        Force.time = time;
         Body.body_position = R;
-        Force(R, A, time);
+        Force(R, A);
         //std::cout << "R.center_velocity: " << R.center_velocity << std::endl;
         //std::cout << "A.center: " << A.center << std::endl;
         //std::cout << "A.center_velocity: " << A.center_velocity << std::endl;
     }
     void operator()(const Body_position_t& R, data_type time){
-        std::cout << "current = " << current << std::endl;
+        Force.time = time;
+        Body.body_position = R;
+        //std::cout << "current = " << current << std::endl;
         Rigit_body_orbit.push_back(R);        
         ++current;
-        std::cout << "R.center: " << R.center << std::endl;
-        std::cout << "R.center_velocity: " << R.center_velocity << std::endl;
+        //std::cout << "R.center: " << R.center << std::endl;
+        //std::cout << "R.center_velocity: " << R.center_velocity << std::endl;
     }
 };
+
+std::ostream& operator<<(std::ostream& is, const Body_position_t& in);
 
 inline Euler_angles_t operator+(const Euler_angles_t& Angles_left, const Euler_angles_t& Angles_right){
     return Euler_angles_t (Angles_left.angles + Angles_right.angles);
@@ -263,6 +286,12 @@ inline Body_position_t operator+(const Body_position_t& Body_left, const Body_po
     Body_left.angular_velocity + Body_right.angular_velocity);
 }
 
+inline Body_position_t operator+=(Body_position_t& Body_left, const Body_position_t& Body_right){
+    return Body_left = Body_position_t (Body_left.center + Body_right.center, Body_left.center_velocity + 
+    Body_right.center_velocity, Body_left.Euler_angles.angles + Body_right.Euler_angles.angles, 
+    Body_left.angular_velocity + Body_right.angular_velocity);
+}
+
 template<typename scalar_t>
 inline Body_position_t operator*(const Body_position_t& Body_left, const scalar_t& scalar){
     return Body_position_t (Body_left.center*scalar, Body_left.center_velocity*scalar, 
@@ -282,3 +311,6 @@ inline Body_position_t operator/(const Body_position_t& Body_left, const scalar_
     return Body_position_t (Body_left.center/scalar, Body_left.center_velocity/scalar, 
     Body_left.Euler_angles.angles/scalar, Body_left.angular_velocity/scalar);
 }
+
+
+#endif
