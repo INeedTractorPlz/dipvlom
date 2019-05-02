@@ -16,16 +16,18 @@ using namespace boost::numeric::ublas;
 typedef double data_type;
 typedef vector<data_type> state_vector;
 
-state_vector Force_t::external_potential(unsigned number_body) const{
-        if(number_body == 1)
-                return state_vector(3,0.);
-        state_vector Earth(3,0.);
-        data_type phi = time*M_PI*2;
-        Earth(0) = cos(phi);
-        Earth(1) = sin(phi);
-        //std::cout << "time = " << time << std::endl;
-        //std::cout << "Earth = " << Earth << std::endl;
-        return Earth;
+void Force_t::fill_ephemeris(){
+        planet_ephemeris.emplace_back(planets);
+}
+
+void Force_t::fill_planets(){
+        data_type phi, timediff;
+
+        timediff = 0.75 - 0.019;
+        planets = std::vector<state_vector>(number_bodies,state_vector(3,0));
+        phi = (time+timediff)*M_PI*2;
+        planets[0](0) = cos(phi);
+        planets[0](1) = sin(phi);
 }
 
 /*void Force_t::operator()(const state_vector& R, state_vector& A) const{
@@ -39,10 +41,10 @@ state_vector Force_t::external_potential(unsigned number_body) const{
 */
 
 void Force_t::operator()(const state_vector& R, state_vector& A) const{
-       A = state_vector(R.size(),0);
-       state_vector r;
-       for(unsigned i = 0; i < planet_mass.size(); ++i){
-           r = external_potential(i);
+        A = state_vector(R.size(),0);
+        state_vector r;
+        for(unsigned i = 0; i < planet_mass.size(); ++i){
+           r = planets[i];
            auto norm_ = norm_2(R - r);
            A += planet_mass[i]*(r - R)/(norm_*norm_*norm_);
            //simple_cout("r = ", r);

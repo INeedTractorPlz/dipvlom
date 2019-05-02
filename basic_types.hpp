@@ -26,6 +26,29 @@ typedef double data_type;
 typedef vector<data_type> state_vector;
 typedef matrix<data_type> state_matrix;
 
+template<int N, typename Tail, typename... Args>
+struct Functions_and_Args_t
+{
+    static void forward_fanda(std::tuple<Args ...> fanda, Tail optarg){
+        
+        constexpr int size = sizeof...(Args);
+        constexpr int index = size - 2*N - 2;
+        std::get<index+1>(fanda)(std::get<index>(fanda), optarg);
+        Functions_and_Args_t<N-1, Tail, Args...>::forward_fanda(fanda, optarg);
+    }
+};
+
+template<typename Tail, typename... Args>
+struct Functions_and_Args_t<0, Tail, Args...>
+{
+    static void forward_fanda(std::tuple<Args ...> fanda, Tail optarg){
+        
+        constexpr int size = sizeof...(Args);
+        constexpr int index = size - 2;
+        std::get<index+1>(fanda)(std::get<index>(fanda), optarg);
+    }
+};
+
 template<int number_shorts, int number_longs, typename Head, typename... Args>
 struct parser
 {
@@ -187,12 +210,16 @@ struct RungeKutta5_Fehlberg{
     }
 };
 
-template<typename type, typename Type, std::size_t system_order = 12,std::size_t method_order = 4>
+template<typename type, typename Type, typename Regularization_t, std::size_t system_order = 12,std::size_t method_order = 4>
 struct Lobatto{
     rg::Lobatto3a<type, system_order, method_order> lobatto3a;
     using state_vector_t = rg::state_vector<type, system_order>;
     type epsilon = 10*std::numeric_limits<type>::epsilon();
-    Lobatto(){}
+    Regularization_t &Regularization;
+
+    Lobatto(Regularization_t &Regularization) 
+    : Regularization(Regularization){ }
+    
     /*template<class RHS>
     auto do_step(const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,
     const Number_t& epsilon)
@@ -200,7 +227,7 @@ struct Lobatto{
         return this->do_step_impl(a,b,sigma,y,rhs,t,dt,epsilon);
     }*/
     template<typename sysf>
-    void do_step(sysf sysF, const Type &in, Type &out, type time, type step){
+    void do_step(sysf sysF, const Type &in, Type &out, type time, type &step){
         std::function<state_vector_t(const state_vector_t&, const type&)> rhs =
         [&sysF](const state_vector_t &y, const type &t){
             Type out, in = Type(y);
@@ -214,6 +241,10 @@ struct Lobatto{
             }
             return out_vec;
         };
+
+        if(Regularization.step_check(step, in))
+            Regularization.step_change(step);
+
         //simple_cout("Before do_step");
         auto out_vec = lobatto3a.do_step(in.to_vec(), rhs, time, step, epsilon);
         //simple_cout("After do_step");
@@ -221,4 +252,58 @@ struct Lobatto{
     }
 };
 
+template< typename type, typename Type>
+struct Regularization_distance_t{
+    std::vector<std::vector<state_vector> > &planet_ephemeris;
+    unsigned& current;
+    type epsilon, min_distance, step_0, &time, min_min_distance;
+    unsigned number_changes = 0;
+    std::ostream *distances_f;
+    bool file_record = true;
+
+    Regularization_distance_t(std::vector<std::vector<state_vector> > &planet_ephemeris, 
+    unsigned& current, type epsilon, type &time, std::ostream *distances_f = NULL): 
+    planet_ephemeris(planet_ephemeris),  current(current), epsilon(epsilon), time(time) {
+        if(distances_f == NULL)
+            file_record = false;
+        else
+            this->distances_f = distances_f;
+        min_min_distance = -1;
+    }
+
+    bool step_check(type &step, const Type &in){
+        std::vector<type> distances;
+       
+        for(unsigned i = 0; i < planet_ephemeris[current].size(); i++){
+            distances.emplace_back(norm_2(in.center - planet_ephemeris[current][i]));
+        }
+        min_distance = *std::min_element(distances.begin(), distances.end());
+        
+        if(file_record){
+            *distances_f << time;
+            for(auto x : distances)
+                *distances_f << " " << x;
+            *distances_f << std::endl;
+        }
+
+        if(min_distance <= epsilon)
+            return true;
+        else
+            return false;
+    }
+    void step_change(type &step){
+        if(number_changes == 0){
+            step_0 = step;
+            min_min_distance = min_distance;
+        }
+        number_changes++;
+        
+        //simple_cout("min_min_distance=", min_min_distance, "min_distance =",  min_distance);
+
+        if(min_min_distance > min_distance || min_min_distance == -1)
+            min_min_distance = min_distance;
+        
+        step = step_0*min_distance/epsilon;
+    }
+};
 #endif

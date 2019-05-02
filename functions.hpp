@@ -31,7 +31,7 @@ void fun_for_parser(type& parameter, char* optarg){
 template<typename type, typename Integrator, typename sysf, typename observer,typename Type, 
 typename controller = std::function<int(const Type& X, const Type& Y)>, 
 typename exit=std::function<int(const Type&X, const type &t)> >
-inline int integrate(Integrator rk, sysf sysF, Type& X0, type t, type h, int n, observer Obs,
+inline int integrate(Integrator rk, sysf sysF, Type& X0, type &t, type &h, int n, observer Obs,
                 exit Bad = [](const Type& X, const type& t)->int{return 1;},
                 controller Err = [](const Type& X, const Type& Y)->int{return -1;}){
     int state, number_steps = 0;

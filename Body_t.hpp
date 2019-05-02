@@ -14,6 +14,7 @@
 #include"functions.hpp"
 #include"runge-kutta.hpp"
 #include"force.hpp"
+#include"basic_types.hpp"
 
 using namespace boost::numeric::ublas;
 
@@ -128,6 +129,8 @@ struct Body_position_t{
 
 };
 
+std::ostream& operator<<(std::ostream& is, const Body_position_t& in);
+
 struct Body_t;
 
 struct Surface_t{
@@ -227,34 +230,126 @@ struct Quadrature_t{
     }
 };
 
+template<typename type>
+struct Record_Functions_t{
+    type &time;
+    Force_t &Force;
+    unsigned &current;
+    std::function<void(std::ostream *, const Body_position_t&)> standart_and_time,
+    angular_velocity, centers_planets, timeline, momentum;
+
+    Record_Functions_t(type &time, unsigned &current, Force_t& Force) : 
+    time(time), current(current), Force(Force) {
+
+        this->standart_and_time = [this](std::ostream *file, const Body_position_t& R){
+            *file << "time = " << this->time << std::endl;
+            *file << R << std::endl;
+        };
+
+        this->angular_velocity = [](std::ostream *file, const Body_position_t& R){
+            for(auto x : R.angular_velocity)
+                *file << x << " ";
+            *file << std::endl;
+        };
+
+        this->centers_planets = [this](std::ostream *file, const Body_position_t& R){
+            for(auto x : R.center)
+                    *file << x << " ";
+                for(unsigned i=0; i < this->Force.number_bodies; i++){
+                    for(auto x : this->Force.planet_ephemeris[this->current][i])
+                        *file << x << " ";
+                }
+                *file << std::endl;
+        };
+
+        this->timeline = [this](std::ostream *file, const Body_position_t& R){
+            *file << this->time << std::endl;
+        };
+
+        this->momentum = [this](std::ostream *file, const Body_position_t& R){
+            for(auto x : this->Force.momentum)
+                *file << x << " ";    
+            *file << std::endl;
+        };
+    }
+};
+
+template<typename tuple_t>
 struct Integrator_t{
-    std::vector<Body_position_t>& Rigit_body_orbit;
-    unsigned& current;
+    std::vector<Body_position_t> *Rigid_body_orbit = NULL;
+    unsigned &current, frequency;
     Body_t& Body;
     Force_t& Force;
-    Integrator_t(std::vector<Body_position_t> &Rigit_body_orbit, unsigned& current, Body_t &Body, 
-    Force_t& Force) : Rigit_body_orbit(Rigit_body_orbit), current(current), 
-    Body(Body), Force(Force){  }
+    tuple_t * fandf = NULL;
+    
+    //std::ostream *planets_f = NULL;
+    
+    Integrator_t(unsigned& current, Body_t &Body, Force_t& Force,
+    //std::ostream *planets_f = NULL, 
+    unsigned frequency = 1,
+    std::vector<Body_position_t> *Rigit_body_orbit = NULL, tuple_t *fandf = NULL) :
+    current(current), Body(Body), Force(Force){ 
+        if(Rigid_body_orbit != NULL)
+            this->Rigid_body_orbit = Rigid_body_orbit;
+
+    //    if(planets_f != NULL)
+    //        this->planets_f = planets_f;
+        
+        if(fandf != NULL)
+            this->fandf = fandf;
+        
+        this->frequency = frequency;
+    }
+    
     void operator()(const Body_position_t& R, Body_position_t& A, data_type time){
         Force.time = time;
         Body.body_position = R;
+        Force.fill_planets();
         Force(R, A);
         //std::cout << "R.center_velocity: " << R.center_velocity << std::endl;
         //std::cout << "A.center: " << A.center << std::endl;
         //std::cout << "A.center_velocity: " << A.center_velocity << std::endl;
     }
+
     void operator()(const Body_position_t& R, data_type time){
         Force.time = time;
         Body.body_position = R;
         //std::cout << "current = " << current << std::endl;
-        Rigit_body_orbit.push_back(R);        
+        if(Rigid_body_orbit != NULL)
+            Rigid_body_orbit->push_back(R);
+        
+        Force.momentum(0) = R.angular_velocity(0)*Body.rotational_inertia(0,0);
+        Force.momentum(1) = R.angular_velocity(1)*Body.rotational_inertia(1,1);
+        Force.momentum(2) = R.angular_velocity(2)*Body.rotational_inertia(2,2);
+        
+        /*if(planets_f != NULL & current%frequency == 0){
+            for(auto x : R.center)
+                *planets_f << x << " ";
+            for(unsigned i=0; i < Force.number_bodies; i++){
+                for(auto x : Force.planet_ephemeris[current][i])
+                    *planets_f << x << " ";
+            }
+            *planets_f << std::endl;
+        }*/
+
+        if(fandf != NULL & current%frequency == 0){
+            files_and_functions(*fandf, R);
+        }
+
         ++current;
+        Force.fill_ephemeris();
+
         //std::cout << "R.center: " << R.center << std::endl;
         //std::cout << "R.center_velocity: " << R.center_velocity << std::endl;
     }
-};
 
-std::ostream& operator<<(std::ostream& is, const Body_position_t& in);
+    template<typename Tail, typename... Args>
+    void files_and_functions(std::tuple<Args ...> &tuple_fandf, Tail optarg){
+        constexpr int N = std::tuple_size<tuple_t>::value/2 - 1;
+        Functions_and_Args_t<N, Tail, Args...>::forward_fanda(tuple_fandf, optarg);
+    }
+
+};
 
 inline Euler_angles_t operator+(const Euler_angles_t& Angles_left, const Euler_angles_t& Angles_right){
     return Euler_angles_t (Angles_left.angles + Angles_right.angles);

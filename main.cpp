@@ -20,19 +20,41 @@ typedef double data_type;
 typedef vector<data_type> state_vector;
 typedef matrix<data_type> state_matrix;
 
+using void_tuple = std::tuple<int, std::function<void(int, const Body_position_t&)> >;
+using s_function = std::function<void(std::ostream *, const Body_position_t&)>;
+using s_tuple = std::tuple<std::ostream *, s_function>;
+template<int N>
+struct s_tupleN_t{
+    using type = decltype(std::tuple_cat(s_tuple(), typename s_tupleN_t<N-1>::type()));
+};
+
+template<>
+struct s_tupleN_t<1>{
+    using type = s_tuple;
+};
+
+template<int N> using s_tupleN = typename s_tupleN_t<N>::type;
+
+
 int main(int argc, char *const argv[]){
     std::ios_base::sync_with_stdio(false);
     std::ifstream planet_ephemeris_f, planet_mass_f, initial_data_f, size_f, size_integrate_f;
-    std::ofstream body_position_f, angular_velocity_f, planets_f;
+    std::ofstream body_position_f, angular_velocity_f, planets_f, distances_f, time_f, momentum_f;
 
     data_type pi = atan(data_type(1.))*4, presicion = std::numeric_limits<data_type>::epsilon();
-    data_type Time, step, G = 4*pi*pi, const_density_1 = 1.0e-09, const_density_2 = 1.0e-09;
+    data_type Time, time = 0, step, G = 4*pi*pi, const_density_1 = 1.0e-09, const_density_2 = 1.0e-09;
     unsigned current = 0, number_steps, number_bodies, number_granulations;
     std::vector<std::vector<state_vector> > planet_ephemeris;
     std::vector<data_type> planet_mass;
-    
+    data_type min_distance = 0.01;
+
     //RungeKutta4<data_type,Body_position_t> rk4;
-    Lobatto<data_type,Body_position_t> lob3a;
+    distances_f.open("distances.dat", std::ios_base::trunc);
+    Regularization_distance_t<data_type, Body_position_t> Regularization_distance(planet_ephemeris, current,
+    min_distance, time, &distances_f);
+
+    Lobatto<data_type,Body_position_t, 
+    Regularization_distance_t<data_type, Body_position_t> > lob3a(Regularization_distance);
     Body_position_t Body_position;
 
     Body_position.initial("Body_initial.dat");
@@ -65,6 +87,20 @@ int main(int argc, char *const argv[]){
     planet_ephemeris_f.open("Planet_ephemeris.dat",std::ios_base::in);
     planet_ephemeris_f >> number_bodies;
     
+    step = Time/number_steps;
+    
+    /*data_type time = 0;
+    data_type timediff = 0.5;
+    state_vector Earth(3,0.);
+    for(unsigned i = 0; i < number_steps; i++){
+        planet_ephemeris.emplace_back(std::vector<state_vector>(number_bodies,state_vector(3,0)));
+        data_type phi = (time+timediff)*M_PI*2;
+        Earth(0) = cos(phi);
+        Earth(1) = sin(phi);
+        planet_ephemeris[i][0] = Earth;
+        time += step;
+    }*/
+
     /*data_type void_;
     unsigned t = 0;
     while(!planet_ephemeris_f.eof()){
@@ -99,32 +135,58 @@ int main(int argc, char *const argv[]){
     };
     
     Polygon_t Polygon;
-    Polygon.initial("aster.dat");
+    Polygon.initial("Asteroids/Medusa.dat");
     Cubic_grid_t grid;
     Body_t Body(density, number_granulations, Body_position, Polygon, grid, presicion);
     std::vector<Body_position_t> Rigit_body_orbit;
-    Force_t Force(G, data_type(0.), current, Body, planet_ephemeris, planet_mass);
+    Force_t Force(G, time, current, Body, planet_ephemeris, planet_mass);
     
+    Force.fill_planets();
+    Force.fill_ephemeris();
     
     simple_cout("Full_torque = ", Force.Full_Torque());
     simple_cout("Body.Mass = ", Body.Mass);
     
+    planets_f.open("planets.dat", std::ios_base::trunc);
+    body_position_f.open("Body_position.dat",std::ios_base::trunc);
+    angular_velocity_f.open("Angular_velocity.dat", std::ios_base::trunc);
+    time_f.open("timeline.dat", std::ios_base::trunc);
+    momentum_f.open("momentum.dat", std::ios_base::trunc);
 
-    Integrator_t Integrator(Rigit_body_orbit, current, Body, Force);
+    Record_Functions_t<data_type> Record_Functions(time, current, Force);
     
-    step = Time/number_steps;
+    s_tupleN<5> fandf = std::make_tuple(&planets_f, Record_Functions.centers_planets,
+                                        &body_position_f, Record_Functions.standart_and_time,
+                                        &angular_velocity_f, Record_Functions.angular_velocity,
+                                        &time_f, Record_Functions.timeline,
+                                        &momentum_f, Record_Functions.momentum);
+    
+    Integrator_t<s_tupleN<5> > Integrator(current, Body, Force, /*&planets_f,*/ 1, NULL, &fandf);
+    
     simple_cout("Time = ", Time);
-    simple_cout("step = ", step);
-    simple_cout("number_steps = ", number_steps);
+    simple_cout("step_0 = ", step);
+    simple_cout("number_steps_0 = ", number_steps);
+    
     //simple_cout("planet_ephemeris = ", planet_ephemeris.size());
     //number_steps = 1;
 
     simple_cout(Body_position);
-    number_steps = integrate(lob3a, Integrator, Body_position, data_type(0.), step, number_steps, 
+    number_steps = integrate(lob3a, Integrator, Body_position, time, step, number_steps, 
     Integrator);
     simple_cout(Body_position);
-    
-    body_position_f.open("Body_position.dat",std::ios_base::trunc);
+    simple_cout("step = ", step);
+    simple_cout("number_steps = ", number_steps);
+    simple_cout("number_changes = ", lob3a.Regularization.number_changes);
+    simple_cout("min_distance = ", lob3a.Regularization.min_min_distance);
+
+    planets_f.close();
+    body_position_f.close();
+    angular_velocity_f.close();
+    distances_f.close();
+    time_f.close();
+    momentum_f.close();
+
+    /*body_position_f.open("Body_position.dat",std::ios_base::trunc);
     body_position_f << number_steps << std::endl;
     for(unsigned k = 0; k < number_steps; ++k){
         body_position_f << "time = " << step*k << std::endl;
@@ -140,12 +202,14 @@ int main(int argc, char *const argv[]){
     }
 
     angular_velocity_f.close();
-    
-    data_type time = 0;
+    */
+   
+    /*data_type time = 0;
+    data_type timediff = 0.5;
     planets_f.open("planets.dat", std::ios_base::trunc);
     for(unsigned k = 0; k < number_steps; ++k){
         state_vector Earth(3,0.);
-        data_type phi = time*M_PI*2;
+        data_type phi = (time+timediff)*M_PI*2;
         Earth(0) = cos(phi);
         Earth(1) = sin(phi);
         time += step;
@@ -157,6 +221,7 @@ int main(int argc, char *const argv[]){
     }
 
     planets_f.close();
-    
+    */
+
     return 0;
 }
