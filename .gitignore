@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
 .vscode/
 saved/
+Asteroids/
 basket/
 *.o
 *.dat
