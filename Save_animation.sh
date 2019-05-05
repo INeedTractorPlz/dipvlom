@@ -1,5 +1,8 @@
 #!/bin/bash 
 
+mkdir ./saved/$1_animations
+
 for file in *.mp4; do
-mv ./${file} ./animations/$1_${file}
+mv ./${file} ./saved/$1_animations/${file}
 done
+

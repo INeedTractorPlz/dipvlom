@@ -50,11 +50,6 @@ int main(int argc, char *const argv[]){
 
     //RungeKutta4<data_type,Body_position_t> rk4;
     distances_f.open("distances.dat", std::ios_base::trunc);
-    Regularization_distance_t<data_type, Body_position_t> Regularization_distance(planet_ephemeris, current,
-    min_distance, time, &distances_f);
-
-    Lobatto<data_type,Body_position_t, 
-    Regularization_distance_t<data_type, Body_position_t> > lob3a(Regularization_distance);
     Body_position_t Body_position;
 
     Body_position.initial("Body_initial.dat");
@@ -133,6 +128,12 @@ int main(int argc, char *const argv[]){
         else
             return const_density_2;
     };
+    
+    Regularization_distance_t<data_type, Body_position_t> Regularization_distance(planet_ephemeris, current,
+    min_distance, time, &distances_f);
+
+    Lobatto<data_type,Body_position_t, 
+    Regularization_distance_t<data_type, Body_position_t> > lob3a(Regularization_distance, 100, step);
     
     Polygon_t Polygon;
     Polygon.initial("Asteroids/Medusa.dat");

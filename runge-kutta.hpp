@@ -259,9 +259,9 @@ public:
         return rhs(v,ai*dt+t);
     }
     template<class RHS>
-    state_vector_t do_step_impl(const vector_t& a,const matrix_t& b,const vector_t& sigma,const state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon)
+    state_vector_t do_step_impl(const vector_t& a,const matrix_t& b,const vector_t& sigma,const state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon, unsigned max_iteration_number)
     {
-        ks_t ks=static_cast<Solver*>(this)->ks_solver(a,b,y,rhs,t,dt,epsilon);
+        ks_t ks=static_cast<Solver*>(this)->ks_solver(a,b,y,rhs,t,dt,epsilon, max_iteration_number);
         auto v=y;
         for(std::size_t i=0;i<method_order;i++) v+=ks[i]*(sigma[i]*dt);
         return v;
@@ -278,14 +278,18 @@ class Runge_Kutta_implicit: public Runge_Kutta<Number_t,system_order,method_orde
     using type = Runge_Kutta<Number_t,system_order,method_order,Runge_Kutta_implicit<Number_t,system_order,method_order>>;
 public:
     template<class RHS>
-    typename type::ks_t ks_solver(const typename type::vector_t& a,const typename type::matrix_t& b,const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon)
+    typename type::ks_t ks_solver(const typename type::vector_t& a,const typename type::matrix_t& b,const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon, unsigned max_iteration_number)
     {
         typename type::ks_t ks{},ks_prev{};
         ks.fill(rhs(y,t));
+        unsigned iteration_number = 0;
         //auto ks_prev=ks;
         //++ks_prev[0][0]; //set initial difference to allow next cycle
         do
         {
+            iteration_number++;
+            if(iteration_number >= max_iteration_number)
+                throw std::runtime_error("error");
             ks_prev=ks;
             for(std::size_t i=0;i<method_order;i++) ks[i]=this->make_ks(method_order,a[i],b[i],ks,y,rhs,t,dt);
         }while(this->ks_diff_norm(ks,ks_prev)>epsilon*this->ks_norm(ks));
@@ -443,9 +447,9 @@ public:
     constexpr static const typename type::vector_t sigma=make_sigma();
     constexpr static const typename type::matrix_t b=make_b();
     template<class RHS>
-    auto do_step(const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon)
+    auto do_step(const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,const Number_t& epsilon, unsigned max_iteration_number)
     {
-        return this->do_step_impl(a,b,sigma,y,rhs,t,dt,epsilon);
+        return this->do_step_impl(a,b,sigma,y,rhs,t,dt,epsilon, max_iteration_number);
     }
 };
 

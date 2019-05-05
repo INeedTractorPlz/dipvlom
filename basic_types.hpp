@@ -12,6 +12,9 @@
 #include<iterator>
 #include<cmath>
 #include<tuple>
+#include <random>
+#include <chrono>
+
 #define sign(a) ( ( (a) < 0 )  ?  -1   : ( (a) > 0 ) )
 
 #include<iostream>
@@ -216,9 +219,14 @@ struct Lobatto{
     using state_vector_t = rg::state_vector<type, system_order>;
     type epsilon = 10*std::numeric_limits<type>::epsilon();
     Regularization_t &Regularization;
+    unsigned max_iteration_number;
 
-    Lobatto(Regularization_t &Regularization) 
-    : Regularization(Regularization){ }
+    Lobatto(Regularization_t &Regularization, unsigned max_iteration_number, type step_0) 
+    : Regularization(Regularization), max_iteration_number(max_iteration_number){ 
+        Regularization.step_0 = step_0;
+        Regularization.step_wo_rand = step_0;
+        Regularization.step_wo_reg = step_0;
+    }
     
     /*template<class RHS>
     auto do_step(const typename type::state_vector_t& y,RHS rhs,const Number_t& t,const Number_t& dt,
@@ -244,9 +252,32 @@ struct Lobatto{
 
         if(Regularization.step_check(step, in))
             Regularization.step_change(step);
+        
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        std::default_random_engine generator(seed);
 
+        std::poisson_distribution<int> distribution(Regularization.step_wo_rand/step);
+        double random_number = distribution(generator);
+        
+        if(random_number >= 5 && step < Regularization.step_wo_rand){
+            step *= 2;
+            Regularization.step_wo_reg *= 2;
+            simple_cout("random_number = ", random_number, 
+            " Regularization.step_wo_rand/step = ", Regularization.step_wo_rand/step);
+            simple_cout("step = ", step);
+        }
+        
+        rg::state_vector<data_type, 12> out_vec;
         //simple_cout("Before do_step");
-        auto out_vec = lobatto3a.do_step(in.to_vec(), rhs, time, step, epsilon);
+        reg_point:
+        try{
+            out_vec = lobatto3a.do_step(in.to_vec(), rhs, time, step, epsilon, max_iteration_number);
+        }catch(...){
+            step /= 2;
+            Regularization.step_wo_reg /= 2;
+            goto reg_point;
+        }
+
         //simple_cout("After do_step");
         out = Type(out_vec);
     }
@@ -256,7 +287,7 @@ template< typename type, typename Type>
 struct Regularization_distance_t{
     std::vector<std::vector<state_vector> > &planet_ephemeris;
     unsigned& current;
-    type epsilon, min_distance, step_0, &time, min_min_distance;
+    type epsilon, min_distance, step_0, step_wo_reg, step_wo_rand, &time, min_min_distance;
     unsigned number_changes = 0;
     std::ostream *distances_f;
     bool file_record = true;
@@ -293,7 +324,6 @@ struct Regularization_distance_t{
     }
     void step_change(type &step){
         if(number_changes == 0){
-            step_0 = step;
             min_min_distance = min_distance;
         }
         number_changes++;
@@ -303,7 +333,8 @@ struct Regularization_distance_t{
         if(min_min_distance > min_distance || min_min_distance == -1)
             min_min_distance = min_distance;
         
-        step = step_0*min_distance/epsilon;
+        step_wo_rand = step_0*min_distance/epsilon;
+        step = step_wo_reg*min_distance/epsilon;
     }
 };
 #endif
