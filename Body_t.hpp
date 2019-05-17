@@ -165,6 +165,7 @@ struct Cubic_grid_t : grid_t
 struct Polygon_t : Surface_t
 {
     std::vector<triangle_t> poligons;
+    data_type radius;
     bool is_inside(const masspt_t &masspt) const
     {
         for (auto &p : poligons)
@@ -183,9 +184,16 @@ struct Polygon_t : Surface_t
         });
         return max_width;
     }
-    Polygon_t(const std::vector<triangle_t> &poligons) : poligons(poligons) {}
+    Polygon_t(const std::vector<triangle_t> &poligons, data_type radius) : poligons(poligons),
+    radius(radius) {
+        data_type lambda = radius/max_width();
+        for(auto x : poligons){
+            x = triangle_t(x.vertex_1*lambda, x.vertex_2*lambda, x.vertex_3*lambda);
+        }
+
+    }
     Polygon_t() {}
-    void initial(const std::string &file_name);
+    void initial(const std::string &file_name, data_type radius);
 };
 
 struct Sphere_t : Surface_t
@@ -219,10 +227,12 @@ struct Body_t
     Body_t(const std::function<data_type(state_vector)> &density, unsigned number_granulations,
            const Body_position_t &body_position, const Surface_t &Surface,
            const grid_t &grid, data_type presicion) : density(density),
-                                                      number_granulations(number_granulations), body_position(body_position),
-                                                      Surface(Surface), grid(grid), presicion(presicion)
+            number_granulations(number_granulations), body_position(body_position),
+            Surface(Surface), grid(grid), presicion(presicion)
     {
         grid_width = 2 * Surface.max_width() / number_granulations;
+        simple_cout("Surface.max_width() = ", Surface.max_width(), " number_granulations = ",
+        number_granulations);
         grid.grid_fill(*this, Surface);
         calc_mass_and_inertia();
         std::cout << "Rotational inertia:" << std::endl
@@ -263,7 +273,8 @@ struct Record_Functions_t
     Force_t &Force;
     unsigned &current;
     std::function<void(std::ostream *, const Body_position_t &)> standart_and_time,
-        angular_velocity, centers_planets, timeline, momentum;
+        angular_velocity, angular_velocity_Rot, centers_planets, timeline, momentum,
+        momentum_Rot;
 
     Record_Functions_t(type &time, unsigned &current, Force_t &Force) : time(time), current(current), Force(Force)
     {
@@ -275,6 +286,12 @@ struct Record_Functions_t
 
         this->angular_velocity = [](std::ostream *file, const Body_position_t &R) {
             for (auto x : R.angular_velocity)
+                *file << x << " ";
+            *file << std::endl;
+        };
+
+        this->angular_velocity_Rot = [](std::ostream *file, const Body_position_t &R) {
+            for (auto x : prod(R.Euler_angles.Rot, R.angular_velocity))
                 *file << x << " ";
             *file << std::endl;
         };
@@ -299,6 +316,13 @@ struct Record_Functions_t
                 *file << x << " ";
             *file << std::endl;
         };
+
+        this->momentum_Rot = [this](std::ostream *file, const Body_position_t &R) {
+            for (auto x : prod(R.Euler_angles.Rot, this->Force.momentum))
+                *file << x << " ";
+            *file << std::endl;
+        };
+
     }
 };
 

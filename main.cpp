@@ -39,10 +39,11 @@ template<int N> using s_tupleN = typename s_tupleN_t<N>::type;
 int main(int argc, char *const argv[]){
     std::ios_base::sync_with_stdio(false);
     std::ifstream planet_ephemeris_f, planet_mass_f, initial_data_f, size_f, size_integrate_f;
-    std::ofstream body_position_f, angular_velocity_f, planets_f, distances_f, time_f, momentum_f;
+    std::ofstream body_position_f, angular_velocity_f, planets_f, distances_f, 
+    time_f, momentum_f, angular_velocity_Rot_f, momentum_Rot_f;
 
     data_type pi = atan(data_type(1.))*4, presicion = std::numeric_limits<data_type>::epsilon();
-    data_type Time, time = 0, step, G = 4*pi*pi, const_density_1 = 1.0e-09, const_density_2 = 1.0e-09;
+    data_type Time, time = 0, step, G = 4*pi*pi, radius = 1.0e-7, const_density_1 = 1.683e+6, const_density_2 = 1.683e+6;
     unsigned current = 0, number_steps, number_bodies, number_granulations;
     std::vector<std::vector<state_vector> > planet_ephemeris;
     std::vector<data_type> planet_mass;
@@ -136,7 +137,9 @@ int main(int argc, char *const argv[]){
     Regularization_distance_t<data_type, Body_position_t> > lob3a(Regularization_distance, 100, step);
     
     Polygon_t Polygon;
-    Polygon.initial("Asteroids/Medusa.dat");
+    Polygon.initial("Asteroids/Echo.dat", radius);
+    //Sphere_t Polygon(radius);
+    simple_cout("Polygon.max_width = ", Polygon.max_width());
     Cubic_grid_t grid;
     Body_t Body(density, number_granulations, Body_position, Polygon, grid, presicion);
     std::vector<Body_position_t> Rigit_body_orbit;
@@ -145,24 +148,42 @@ int main(int argc, char *const argv[]){
     Force.fill_planets();
     Force.fill_ephemeris();
     
+    simple_cout("number_points = ", Body.points.size());
     simple_cout("Full_torque = ", Force.Full_Torque());
+    state_vector momentum = state_vector(3,0);
+    momentum(0) = Body_position.angular_velocity(0) * Body.rotational_inertia(0, 0);
+    momentum(1) = Body_position.angular_velocity(1) * Body.rotational_inertia(1, 1);
+    momentum(2) = Body_position.angular_velocity(2) * Body.rotational_inertia(2, 2);
+    simple_cout("momentum = ", momentum);
     simple_cout("Body.Mass = ", Body.Mass);
-    
+    simple_cout("Body.points[0].mass = ", Body.points[0].mass);
+    simple_cout("Body.points[0].coord = ", prod(Body_position.Euler_angles.Rot, Body.points[0].coord));
+    state_vector FC(3,0), F0(3,0);
+    Force(prod(Body_position.Euler_angles.Rot, Body.points[0].coord) + Body_position.center, F0);
+    Force(Body_position.center, FC);
+    simple_cout("F(points[0].coord) = ", F0); 
+    simple_cout("F(center) = ", FC);
+    simple_cout("F(points[0].coord) - F(center)", F0 - FC);
+
     planets_f.open("planets.dat", std::ios_base::trunc);
     body_position_f.open("Body_position.dat",std::ios_base::trunc);
     angular_velocity_f.open("Angular_velocity.dat", std::ios_base::trunc);
+    angular_velocity_Rot_f.open("Angular_velocity_Rot.dat", std::ios_base::trunc);
     time_f.open("timeline.dat", std::ios_base::trunc);
     momentum_f.open("momentum.dat", std::ios_base::trunc);
+    momentum_Rot_f.open("momentum_Rot.dat", std::ios_base::trunc);
 
     Record_Functions_t<data_type> Record_Functions(time, current, Force);
     
-    s_tupleN<5> fandf = std::make_tuple(&planets_f, Record_Functions.centers_planets,
+    s_tupleN<7> fandf = std::make_tuple(&planets_f, Record_Functions.centers_planets,
                                         &body_position_f, Record_Functions.standart_and_time,
                                         &angular_velocity_f, Record_Functions.angular_velocity,
+                                        &angular_velocity_Rot_f, Record_Functions.angular_velocity_Rot,
                                         &time_f, Record_Functions.timeline,
-                                        &momentum_f, Record_Functions.momentum);
+                                        &momentum_f, Record_Functions.momentum,
+                                        &momentum_Rot_f, Record_Functions.momentum_Rot);
     
-    Integrator_t<s_tupleN<5> > Integrator(current, Body, Force, /*&planets_f,*/ 1, NULL, &fandf);
+    Integrator_t<s_tupleN<7> > Integrator(current, Body, Force, /*&planets_f,*/ 1, NULL, &fandf);
     
     simple_cout("Time = ", Time);
     simple_cout("step_0 = ", step);
@@ -172,6 +193,8 @@ int main(int argc, char *const argv[]){
     //number_steps = 1;
 
     simple_cout(Body_position);
+    //number_steps = 100;
+    //exit(0);
     number_steps = integrate(lob3a, Integrator, Body_position, time, step, number_steps, 
     Integrator);
     simple_cout(Body_position);
@@ -183,9 +206,11 @@ int main(int argc, char *const argv[]){
     planets_f.close();
     body_position_f.close();
     angular_velocity_f.close();
+    angular_velocity_Rot_f.close();
     distances_f.close();
     time_f.close();
     momentum_f.close();
+    momentum_Rot_f.close();
 
     /*body_position_f.open("Body_position.dat",std::ios_base::trunc);
     body_position_f << number_steps << std::endl;

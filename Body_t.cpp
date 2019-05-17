@@ -85,7 +85,7 @@ void Body_t::reduction_to_center(data_type presicion){
         it.coord = prod(Jacoby.rotation_matrix,it.coord);
 }    
 
-void Polygon_t::initial(const std::string& file_name){
+void Polygon_t::initial(const std::string& file_name, data_type radius){
         std::ifstream aster_data(file_name);
         std::vector<state_vector> vertices{};
         char l;
@@ -107,6 +107,11 @@ void Polygon_t::initial(const std::string& file_name){
         }
         std::cout << "number of poligons " << poligons.size() << std::endl;
         aster_data.close();
+        data_type lambda = radius/max_width();
+        simple_cout("lambda = ", lambda);
+        for(auto& x : poligons){
+            x = triangle_t(x.vertex_1*lambda, x.vertex_2*lambda, x.vertex_3*lambda);
+        }
 }
 
 void Body_position_t::initial(const std::string& file_name){

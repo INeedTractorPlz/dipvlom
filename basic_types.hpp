@@ -262,9 +262,9 @@ struct Lobatto{
         if(random_number >= 5 && step < Regularization.step_wo_rand){
             step *= 2;
             Regularization.step_wo_reg *= 2;
-            simple_cout("random_number = ", random_number, 
-            " Regularization.step_wo_rand/step = ", Regularization.step_wo_rand/step);
-            simple_cout("step = ", step);
+            //simple_cout("random_number = ", random_number, 
+            //" Regularization.step_wo_rand/step = ", Regularization.step_wo_rand/step);
+            //simple_cout("step = ", step);
         }
         
         rg::state_vector<data_type, 12> out_vec;
