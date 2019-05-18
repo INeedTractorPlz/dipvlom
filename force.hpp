@@ -46,6 +46,7 @@ struct Force_t{
     //void operator()(const state_vector& R, state_vector& A) const;    
     state_vector operator()(const masspt_t& masspt) const;
     state_vector Full_Torque(); 
+    state_vector Full_Torque_Test();
     state_vector external_potential(unsigned number_body) const;
     void operator()(const Body_position_t& R, Body_position_t& Derivative_Body_Position);
     void fill_ephemeris();

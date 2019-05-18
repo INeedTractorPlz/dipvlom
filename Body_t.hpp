@@ -159,21 +159,21 @@ struct grid_t
 
 struct Cubic_grid_t : grid_t
 {
-    void grid_fill(Body_t &Body, const Surface_t &Surface) const;
+    void grid_fill(Body_t &Body, const Surface_t &Surface) const override;
 };
 
 struct Polygon_t : Surface_t
 {
     std::vector<triangle_t> poligons;
     data_type radius;
-    bool is_inside(const masspt_t &masspt) const
+    bool is_inside(const masspt_t &masspt) const override
     {
         for (auto &p : poligons)
             if (!p.right_side(masspt))
                 return false;
         return true;
     }
-    data_type max_width() const
+    data_type max_width() const override
     {
         data_type max_width;
         std::for_each(poligons.begin(), poligons.end(), [&max_width](const triangle_t &triangle) {
@@ -200,12 +200,12 @@ struct Sphere_t : Surface_t
 {
     data_type Radius;
     Sphere_t(data_type Radius) : Radius(Radius) {}
-    inline bool is_inside(const masspt_t &masspt) const
+    inline bool is_inside(const masspt_t &masspt) const override
     {
         return (norm_2(masspt.coord) <= Radius);
     }
 
-    inline data_type max_width() const
+    inline data_type max_width() const override
     {
         return Radius;
     }
@@ -234,16 +234,20 @@ struct Body_t
         simple_cout("Surface.max_width() = ", Surface.max_width(), " number_granulations = ",
         number_granulations);
         grid.grid_fill(*this, Surface);
-        calc_mass_and_inertia();
+        calc_mass();
+        reduction_to_center();
+        calc_inertia();
         std::cout << "Rotational inertia:" << std::endl
                   << rotational_inertia << std::endl;
-        reduction_to_center(presicion);
+        rotate_to_diag(presicion);
         std::cout << "Rotational inertia after reduction to center:" << std::endl
                   << rotational_inertia << std::endl;
     }
 
-    void calc_mass_and_inertia();
-    void reduction_to_center(data_type presicion);
+    void calc_mass();
+    void calc_inertia();
+    void reduction_to_center();
+    void rotate_to_diag(data_type presicion);
 };
 
 struct Quadrature_t

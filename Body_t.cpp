@@ -22,9 +22,12 @@ typedef matrix<data_type> state_matrix;
 grid_t::~grid_t() {}
 Surface_t::~Surface_t() {}
 
-void Body_t::calc_mass_and_inertia(){
+void Body_t::calc_mass(){
+    Quadrature_t  calc(*this);
+    Mass = calc([](const masspt_t& masspt)->data_type{ return masspt.mass;});    
+}
+void Body_t::calc_inertia(){
         Quadrature_t  calc(*this);
-        Mass = calc([](const masspt_t& masspt)->data_type{ return masspt.mass;});
         rotational_inertia = state_matrix(3,3);
         rotational_inertia(0,0) = calc([](const masspt_t& masspt)->data_type{
             return masspt.mass*(masspt.coord(1)*masspt.coord(1) + masspt.coord(2)*masspt.coord(2));});
@@ -67,7 +70,7 @@ void Cubic_grid_t::grid_fill(Body_t& Body, const Surface_t& Surface) const{
             }
         }
 }
-void Body_t::reduction_to_center(data_type presicion){
+void Body_t::reduction_to_center(){
     Quadrature_t calc_center(*this);
     state_vector center = calc_center([](const masspt_t& masspt)->state_vector{
         return masspt.coord*masspt.mass;
@@ -76,14 +79,16 @@ void Body_t::reduction_to_center(data_type presicion){
         it.coord += -center;
     }
     std::cout << "center = " << center << std::endl;
-    
+}  
+
+void Body_t::rotate_to_diag(data_type presicion){
     Jacoby_t<data_type> Jacoby(rotational_inertia, presicion);
     std::cout << "Jacoby.rotation_matrix:" << std::endl;
     std::cout << Jacoby.rotation_matrix << std::endl;
     
     for(auto it : points)
         it.coord = prod(Jacoby.rotation_matrix,it.coord);
-}    
+}
 
 void Polygon_t::initial(const std::string& file_name, data_type radius){
         std::ifstream aster_data(file_name);

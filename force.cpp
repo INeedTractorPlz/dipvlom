@@ -66,13 +66,32 @@ state_vector Force_t::operator()(const masspt_t& masspt) const{
         //std::cout << Body.body_position.Euler_angles.Rot << std::endl;
         F = masspt.mass*prod(trans(Body.body_position.Euler_angles.Rot), F);
         //simple_cout("F = ", F);
-        return cross_product(masspt.coord,F);
+        return cross_product(masspt.coord, F);
 }
 
 state_vector Force_t::Full_Torque(){
         Quadrature_t integrator_Tor(Body);
         return integrator_Tor(*this);
 }
+
+state_vector Force_t::Full_Torque_Test(){
+        Quadrature_t integrator_Tor(Body);
+        struct eq_force_t{
+                Body_t& Body;
+                Force_t *Force;
+                state_vector operator()(const masspt_t& masspt) const {
+                        state_vector F;
+                        (*Force)(Body.body_position.center, F);//Перевести masspt.coord
+                        //std::cout << Body.body_position.Euler_angles.Rot << std::endl;
+                        F = masspt.mass*prod(trans(Body.body_position.Euler_angles.Rot), F);
+                        //simple_cout("F = ", F);
+                        return cross_product(masspt.coord, F);             
+                };
+        };
+        eq_force_t eq_force {Body, this};
+        return integrator_Tor(eq_force);
+}
+
 
 void Force_t::operator()(const Body_position_t& R, Body_position_t& Derivative_Body_Position){
         state_vector L(3, 0.);

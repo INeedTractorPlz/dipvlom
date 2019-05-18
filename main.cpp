@@ -43,7 +43,7 @@ int main(int argc, char *const argv[]){
     time_f, momentum_f, angular_velocity_Rot_f, momentum_Rot_f;
 
     data_type pi = atan(data_type(1.))*4, presicion = std::numeric_limits<data_type>::epsilon();
-    data_type Time, time = 0, step, G = 4*pi*pi, radius = 1.0e-7, const_density_1 = 1.683e+6, const_density_2 = 1.683e+6;
+    data_type Time, time = 0, step, G = 4*pi*pi, radius = 1.0e-6, const_density_1 = 1.683e+6, const_density_2 = 1.683e+6;
     unsigned current = 0, number_steps, number_bodies, number_granulations;
     std::vector<std::vector<state_vector> > planet_ephemeris;
     std::vector<data_type> planet_mass;
@@ -137,7 +137,7 @@ int main(int argc, char *const argv[]){
     Regularization_distance_t<data_type, Body_position_t> > lob3a(Regularization_distance, 100, step);
     
     Polygon_t Polygon;
-    Polygon.initial("Asteroids/Echo.dat", radius);
+    Polygon.initial("Asteroids/Test.dat", radius);
     //Sphere_t Polygon(radius);
     simple_cout("Polygon.max_width = ", Polygon.max_width());
     Cubic_grid_t grid;
@@ -150,6 +150,7 @@ int main(int argc, char *const argv[]){
     
     simple_cout("number_points = ", Body.points.size());
     simple_cout("Full_torque = ", Force.Full_Torque());
+    simple_cout("Full_torque_Test = ", Force.Full_Torque_Test());
     state_vector momentum = state_vector(3,0);
     momentum(0) = Body_position.angular_velocity(0) * Body.rotational_inertia(0, 0);
     momentum(1) = Body_position.angular_velocity(1) * Body.rotational_inertia(1, 1);
